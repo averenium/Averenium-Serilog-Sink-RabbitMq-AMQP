@@ -1,0 +1,6 @@
+# Test-specific analyzer relaxations
+[*.cs]
+# Underscores are allowed in test method names (Method_State_ExpectedResult)
+dotnet_diagnostic.CA1707.severity = none
+# ConfigureAwait is not needed in test code
+dotnet_diagnostic.CA2007.severity = none

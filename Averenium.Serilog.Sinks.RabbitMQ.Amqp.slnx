@@ -1,0 +1,27 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="AGENTS.md" />
+    <File Path="CHANGELOG.md" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="tests/.editorconfig" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="docs/architecture.md" />
+    <File Path="docs/prior-art.md" />
+    <File Path="docs/adr/0001-use-rabbitmq-amqp-client.md" />
+    <File Path="docs/adr/0002-own-buffering-pipeline.md" />
+    <File Path="docs/adr/0003-connection-supervision.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Averenium.Serilog.Sinks.RabbitMQ.Amqp/Averenium.Serilog.Sinks.RabbitMQ.Amqp.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests.csproj" />
+    <Project Path="tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Tests.csproj" />
+  </Folder>
+</Solution>
