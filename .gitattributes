@@ -1,0 +1,16 @@
+# Normalize line endings: LF in the repository and in working copies on every OS.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ico binary
+*.snk binary
+*.nupkg binary
+*.snupkg binary
+*.dll binary
+*.exe binary
