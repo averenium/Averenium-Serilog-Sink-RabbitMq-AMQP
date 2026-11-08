@@ -35,6 +35,17 @@ internal sealed class ConnectionSupervisorOptions
     /// </summary>
     public TimeSpan PublisherRecoveryGrace { get; init; } = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// How long the connection may stay <c>Reconnecting</c> (client-driven recovery) before the supervisor stops waiting
+    /// and rebuilds it itself. The client's recovery attempts run one after another without a timeout of their own, and
+    /// one attempt can hang for minutes in TCP connect to a node that vanished (C13); the supervisor's own attempts are
+    /// bounded by <see cref="ConnectTimeout"/>. Default (<see langword="null"/>): <see cref="MaxReconnectDelay"/> + 15 s,
+    /// i.e. one full back-off step plus a generous connect + handshake.
+    /// </summary>
+    public TimeSpan? ClientRecoveryTimeout { get; init; }
+
+    internal TimeSpan EffectiveClientRecoveryTimeout => ClientRecoveryTimeout ?? MaxReconnectDelay + TimeSpan.FromSeconds(15);
+
     /// <summary>Periodic re-evaluation of connection/publisher state, in addition to state-change events.</summary>
     public TimeSpan HealthCheckInterval { get; init; } = TimeSpan.FromSeconds(1);
 

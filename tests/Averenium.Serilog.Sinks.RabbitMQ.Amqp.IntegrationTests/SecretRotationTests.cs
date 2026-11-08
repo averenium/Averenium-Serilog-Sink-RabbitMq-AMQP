@@ -10,7 +10,7 @@ namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests;
 /// on the broker <em>first</em> and connections are dropped, so events logged in between can only be delivered if the
 /// sink really reconnects with the new secret — and nothing may be lost meanwhile.
 /// </summary>
-[NotInParallel]
+[ParallelLimiter<DisruptiveBrokerTests>]
 public sealed class SecretRotationTests
 {
     private const string User = "rotating";
@@ -50,7 +50,7 @@ public sealed class SecretRotationTests
         await node.ChangePasswordAsync(User, "second-password", ct);
         await node.CloseAllConnectionsAsync(ct);
         Log(logger, "while the old password is refused", 20);
-        await Task.Delay(TimeSpan.FromSeconds(2), ct); // the client retries the old password meanwhile
+        await WaitUntilDisconnectedAsync(node, ct); // from now on the client can only retry the old password
 
         configuration["Serilog:WriteTo:0:Args:password"] = "second-password";
         configuration.Reload();
@@ -92,7 +92,7 @@ public sealed class SecretRotationTests
         await node.ChangePasswordAsync(User, "second-password", ct);
         await node.CloseAllConnectionsAsync(ct);
         Log(logger, "while the old password is refused", 20);
-        await Task.Delay(TimeSpan.FromSeconds(2), ct);
+        await WaitUntilDisconnectedAsync(node, ct);
 
         credentials.Update(User, "second-password");
         Log(logger, "after", 20);
@@ -135,18 +135,35 @@ public sealed class SecretRotationTests
         Log(logger, "before", 10);
         await WaitForMessagesAsync(node, topology, 10, ct);
 
-        // The certificate is renewed (new key, new identity) and the old identity is revoked on the broker,
-        // which also closes its connections: only the renewed certificate can get the sink connected again.
+        // The certificate is renewed (new key, new identity), the old identity is revoked on the broker and all
+        // connections are dropped: only the renewed certificate can get the sink connected again.
         pki.RenewClientCertificate("app-client-renewed");
         await node.DeleteUserAsync(TestPki.ClientUser, ct);
+        await node.CloseAllConnectionsAsync(ct);
         Log(logger, "after", 10);
 
         await WaitForMessagesAsync(node, topology, 20, ct);
-        var users = await node.ConnectionUsersAsync(ct);
+        // The broker's connection list lags a little behind closes; wait until it shows only the new identity.
+        string[] users;
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while ((users = await node.ConnectionUsersAsync(ct)).Contains(TestPki.ClientUser) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(500, ct);
+        }
+
         await logger.DisposeAsync();
         await Assert.That(users).Contains("app-client-renewed").Because("the sink reconnected with the renewed certificate");
         await Assert.That(users).DoesNotContain(TestPki.ClientUser);
         await Assert.That(fallback.Count).IsEqualTo(0);
+    }
+
+    private static async Task WaitUntilDisconnectedAsync(RabbitMqNode node, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while ((await node.ConnectionUsersAsync(ct)).Contains(User) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(200, ct);
+        }
     }
 
     private static void Log(Logger logger, string phase, int count)

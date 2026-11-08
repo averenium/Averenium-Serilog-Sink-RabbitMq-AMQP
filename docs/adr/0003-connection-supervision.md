@@ -13,6 +13,10 @@
 3. Publishers are re-attached with 2 attempts only; failures are just traced. The connection reports
    `Open` before publishers are back.
 4. `PublishAsync` ignores cancellation; outcome can be lost when the link breaks, leaving the task pending.
+5. Recovery attempts run one after another **without a timeout**. An attempt that starts while a node goes away can hang
+   in TCP connect for minutes (SYN to an address that no longer answers — measured against real brokers: connects made
+   at the moment a container stops hang, the rest are refused at once). Recovery then stalls, also when other nodes are
+   up (C13, added 2026-11-08 after flaky restart tests on RabbitMQ 4.0–4.4).
 
 ## Decision
 
@@ -20,7 +24,10 @@
   capped, jittered back-off policy and a round-robin `IUriSelector` over all configured nodes.
 - Add a `ConnectionSupervisor` that owns environment → connection → publisher, tracks their
   `ChangeState` events, and **rebuilds** them from scratch when the client gives up or a publisher is stuck
-  (`Closed`, or not `Open` for longer than a grace period while the connection is `Open`).
+  (`Closed`, or not `Open` for longer than a grace period while the connection is `Open`), or when the client's
+  recovery does not finish within `ClientRecoveryTimeout` (default `MaxReconnectDelay` + 15 s). The supervisor's own
+  connect / attach attempts are always bounded by `ConnectTimeout`, so after that point a long outage is handled by
+  bounded attempts instead of one that may hang.
 - Readiness for publishing = connection `Open` **and** publisher `Open`.
 - Every publish is bounded by the sink's own `PublishTimeout` via `Task.WaitAsync`; timeouts are treated
   as unknown outcome → retry (at-least-once) and as a health signal for the supervisor.

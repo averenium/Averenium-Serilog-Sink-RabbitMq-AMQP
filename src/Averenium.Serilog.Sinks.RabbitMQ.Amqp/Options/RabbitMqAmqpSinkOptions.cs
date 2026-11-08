@@ -189,6 +189,9 @@ public sealed class RabbitMqAmqpSinkOptions
     /// </summary>
     public RabbitMqAmqpTlsOptions Tls { get; set; } = new();
 
+    /// <summary>Overrides the supervisor's client-recovery grace (C13); tests only. Default: MaxReconnectDelay + 15 s.</summary>
+    internal TimeSpan? ClientRecoveryTimeout { get; set; }
+
     internal string EffectiveConnectionName =>
         string.IsNullOrWhiteSpace(ConnectionName)
             ? $"{Assembly.GetEntryAssembly()?.GetName().Name ?? "serilog"}@{Environment.MachineName}"

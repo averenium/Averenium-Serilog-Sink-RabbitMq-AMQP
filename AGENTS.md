@@ -28,7 +28,7 @@ design depends on.
 
 ```
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.slnx      # solution (SLNX format)
-.github/workflows/                        # ci.yml (build + all tests), release.yml (tag → nuget.org)
+.github/workflows/                        # ci.yml (standard check), integration-tests.yml (broker matrix), release.yml (tag → nuget.org)
 global.json                               # pinned .NET SDK (10.0.x, latestFeature roll-forward)
 Directory.Build.props                     # shared MSBuild settings (TFM, nullable, warnings-as-errors, package metadata)
 Directory.Packages.props                  # Central Package Management — ALL package versions live here
@@ -181,8 +181,20 @@ unavailable, say so explicitly instead of claiming they pass.
 - Unit tests must not touch the network or Docker. Abstract the transport behind an internal interface so it can be faked.
 - Use TUnit: `[Test]`, `[Arguments]`, `[Before/After(Test)]`, `ClassDataSource` for shared fixtures; get the
   test `CancellationToken` as a test-method parameter and pass it on. Tests run in parallel by default —
-  no shared mutable state; mark broker-disrupting classes `[NotInParallel]`.
-- Integration tests use `RabbitMqNode` (image `rabbitmq:4-management`, fixed host port so it can be stopped/started)
+  no shared mutable state. Integration tests that only use their own unique topology run on the session-wide
+  `SharedRabbitMq` / `SharedTlsRabbitMq` (`ClassDataSource`, `SharedType.PerTestSession`); tests that stop, restart or
+  otherwise disrupt a broker own their `RabbitMqNode` and are marked `[ParallelLimiter<DisruptiveBrokerTests>]` (at most
+  3 at once). Wait for conditions (a message count, a state, a closed connection), not fixed delays.
+- Integration tests use `RabbitMqNode` (image from `RABBITMQ_IMAGE`, default `rabbitmq:4-management`; fixed host port
+  so it can be stopped/started). Two levels, both through `.github/workflows/integration-tests.yml` (latest patch of
+  each listed minor):
+  - **standard** — every push / pull request (`ci.yml`): the current minors only (4.3, 4.4);
+  - **extended** — every supported minor (4.0–4.4): run it by hand (Actions → *Integration tests (extended)* → Run
+    workflow) before rolling out a new feature; every release runs it too (`release.yml`).
+  Broker behaviour differs between minors (e.g. C10), so a test must pass on all of them. Run one minor locally with
+  `RABBITMQ_IMAGE=rabbitmq:4.1-management dotnet test --project …IntegrationTests`.
+  A new RabbitMQ minor → add it to the standard list in `ci.yml`, the extended lists in `integration-tests.yml` and
+  `release.yml`; move the oldest minor out of the standard list.
   and `SupervisorHarness`; each test uses `Topology.Unique()` names and owns the brokers it disrupts.
   Podman works: its machine exposes the Docker API pipe Testcontainers uses.
 - Resilience is a feature and must be tested: broker stop/start, broker down at start-up, connection

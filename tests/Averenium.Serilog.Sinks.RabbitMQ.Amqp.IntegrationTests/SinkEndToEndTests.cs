@@ -10,14 +10,13 @@ namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests;
 /// "No silent loss" is asserted as: every emitted event is in the queue (at-least-once, so ≥) and nothing
 /// reached the fallback sink.
 /// </summary>
-[NotInParallel]
-public sealed class SinkEndToEndTests
+[ClassDataSource<SharedRabbitMq>(Shared = SharedType.PerTestSession)]
+public sealed class SinkEndToEndTests(SharedRabbitMq broker)
 {
     [Test]
     public async Task Logged_events_reach_the_queue(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         var fallback = new CollectingSink();
@@ -37,8 +36,7 @@ public sealed class SinkEndToEndTests
     [Test]
     public async Task Broker_accepts_every_allowed_message_property_type(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique();
         var fallback = new CollectingSink();
 
@@ -61,8 +59,7 @@ public sealed class SinkEndToEndTests
     [Test]
     public async Task Topology_is_declared_when_enabled(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique();
         var fallback = new CollectingSink();
 
@@ -79,6 +76,7 @@ public sealed class SinkEndToEndTests
     }
 
     [Test]
+    [ParallelLimiter<DisruptiveBrokerTests>]
     public async Task Events_logged_while_the_broker_is_down_at_startup_are_delivered_later(CancellationToken ct)
     {
         await using var node = new RabbitMqNode();
@@ -91,7 +89,6 @@ public sealed class SinkEndToEndTests
             logger.Information("Before broker start {N}", i);
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(2), ct);
         await node.StartAsync(ct);
         await logger.DisposeAsync();
 
@@ -100,6 +97,7 @@ public sealed class SinkEndToEndTests
     }
 
     [Test]
+    [ParallelLimiter<DisruptiveBrokerTests>]
     public async Task Byte_limited_outage_buffer_sends_the_oldest_to_fallback_and_delivers_the_rest(CancellationToken ct)
     {
         await using var node = new RabbitMqNode();
@@ -126,6 +124,7 @@ public sealed class SinkEndToEndTests
     }
 
     [Test]
+    [ParallelLimiter<DisruptiveBrokerTests>]
     public async Task No_events_are_lost_across_a_broker_restart_while_logging(CancellationToken ct)
     {
         await using var node = new RabbitMqNode();
@@ -147,17 +146,18 @@ public sealed class SinkEndToEndTests
             }
         }, CancellationToken.None);
 
-        await Task.Delay(TimeSpan.FromSeconds(2), ct);
+        await WaitForCountAsync(node, topology, 1, ct); // connected and delivering
         Phase("stop broker");
         await node.StopAsync(ct);
         Phase("broker stopped");
-        await Task.Delay(TimeSpan.FromSeconds(3), ct);
+        await Task.Delay(TimeSpan.FromSeconds(1), ct); // the outage itself is the scenario
         Phase("start broker");
         await node.StartAsync(ct);
         Phase("broker container started");
         var brokerReady = await node.WaitUntilAcceptingConnectionsAsync(TimeSpan.FromMinutes(2), ct);
         Phase($"broker accepts AMQP connections after {brokerReady.TotalSeconds:F1} s");
-        await Task.Delay(TimeSpan.FromSeconds(3), ct);
+        var beforeReconnect = await node.MessageCountAsync(topology.Queue, ct);
+        await WaitForCountAsync(node, topology, beforeReconnect + 1, ct); // the sink is delivering again
         await stopLogging.CancelAsync();
         await producer;
         Phase($"logging stopped, emitted {emitted}; disposing logger");
@@ -171,6 +171,7 @@ public sealed class SinkEndToEndTests
     }
 
     [Test]
+    [ParallelLimiter<DisruptiveBrokerTests>]
     public async Task No_events_are_lost_when_failing_over_to_another_node(CancellationToken ct)
     {
         await using var nodeA = new RabbitMqNode();
@@ -187,7 +188,7 @@ public sealed class SinkEndToEndTests
             logger.Information("First half {N}", i);
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(1), ct);
+        await WaitForCountAsync(nodeA, topology, 50, ct);
         await nodeA.StopAsync(ct);
         for (var i = 0; i < 50; i++)
         {
@@ -201,6 +202,20 @@ public sealed class SinkEndToEndTests
         await Assert.That(total).IsGreaterThanOrEqualTo(100UL);
         await Assert.That(await nodeB.MessageCountAsync(topology.Queue, ct)).IsGreaterThanOrEqualTo(50UL);
         await Assert.That(fallback.Count).IsEqualTo(0);
+    }
+
+    private static async Task WaitForCountAsync(RabbitMqNode node, TestTopology topology, ulong expected, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (await node.MessageCountAsync(topology.Queue, ct) < expected)
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                Assert.Fail($"Fewer than {expected} messages arrived within 60 s.");
+            }
+
+            await Task.Delay(100, ct);
+        }
     }
 
     private static void Phase(string name) => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} phase {name}");
@@ -232,6 +247,7 @@ public sealed class SinkEndToEndTests
                     o.MinReconnectDelay = TimeSpan.FromMilliseconds(200);
                     o.MaxReconnectDelay = TimeSpan.FromSeconds(2);
                     o.ShutdownTimeout = TimeSpan.FromSeconds(90);
+                    o.ClientRecoveryTimeout = TimeSpan.FromSeconds(5); // abandon a stalled client recovery (C13) sooner
                     o.QueueSizeLimitBytes = queueSizeLimitBytes;
                     o.MessageProperties = messageProperties;
                 }),

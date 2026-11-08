@@ -8,17 +8,16 @@ namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests;
 /// Broker-side configuration problems must be reported loudly (failure listener) instead of looking like an
 /// endless outage, while the sink keeps retrying so an operator can fix them.
 /// </summary>
-[NotInParallel]
-public sealed class ConfigurationErrorTests
+[ClassDataSource<SharedRabbitMq>(Shared = SharedType.PerTestSession)]
+public sealed class ConfigurationErrorTests(SharedRabbitMq broker)
 {
-    // The missing-exchange heuristic needs 5 failed attaches of ~5 s each.
+    // The missing-exchange heuristic (RabbitMQ 4.0) needs 5 failed attaches of ~5 s each.
     private static readonly TimeSpan ReportTimeout = TimeSpan.FromSeconds(60);
 
     [Test]
     public async Task Conflicting_queue_type_is_reported_as_a_configuration_error(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique();
         await node.DeclareClassicQueueAsync(topology.Queue, ct); // sink wants a quorum queue with this name
         var listener = new NotificationListener();
@@ -34,15 +33,18 @@ public sealed class ConfigurationErrorTests
     [Test]
     public async Task Missing_exchange_without_topology_declaration_is_reported(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique(); // nothing declared
         var listener = new NotificationListener();
 
         var logger = CreateLogger(node, topology, listener, declareTopology: false);
         logger.Information("waits for the exchange");
 
-        await Eventually.TrueAsync(() => listener.Messages.Any(m => m.Contains("cannot attach", StringComparison.Ordinal)),
+        // RabbitMQ 4.0 lets the attach time out (C10, recognised by the heuristic as "probable"); newer versions
+        // (4.4) refuse it with amqp:not-found, which is recognised for certain right away.
+        await Eventually.TrueAsync(
+            () => listener.Messages.Any(m =>
+                m.Contains("cannot attach", StringComparison.Ordinal) || m.Contains("publish target not found", StringComparison.Ordinal)),
             "attaching to a missing exchange is recognised", ReportTimeout, ct);
 
         // Fix the broker side: the buffered event is delivered without restarting the application.

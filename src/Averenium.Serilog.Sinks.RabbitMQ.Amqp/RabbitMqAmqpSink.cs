@@ -105,6 +105,7 @@ internal sealed class RabbitMqAmqpSink : ILogEventSink, IDisposable, IAsyncDispo
                         exception),
                     MinReconnectDelay = options.MinReconnectDelay,
                     MaxReconnectDelay = options.MaxReconnectDelay,
+                    ClientRecoveryTimeout = options.ClientRecoveryTimeout,
                 },
                 timeProvider);
 

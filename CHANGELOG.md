@@ -31,6 +31,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- A client recovery attempt that hangs (TCP connect to a node that vanished can take minutes) no longer stalls delivery:
+  after `MaxReconnectDelay` + 15 s in `Reconnecting` the supervisor rebuilds the connection with its own bounded
+  attempts. Found by flaky broker-restart tests on RabbitMQ 4.0–4.4.
+- Integration test for a missing exchange failed on RabbitMQ 4.4, which refuses the attach with `amqp:not-found` (reported
+  as a certain configuration error) instead of letting it time out like 4.0; both outcomes are accepted.
 - A failed sink start no longer closes an environment passed in from outside (internal/test constructor).
 - Client certificates replaced by a rotation are released one renewal later (on Windows this removes their key
   containers) instead of staying alive until garbage collection.
@@ -82,6 +87,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - MIT license (`LICENSE`); the package license expression is now `MIT` (was Apache-2.0).
+- Integration tests against the latest patch of each RabbitMQ minor: the current minors (4.3, 4.4) on every push and
+  pull request, every supported minor (4.0–4.4) on demand (`integration-tests.yml`) and before every release; the
+  broker image is selected with `RABBITMQ_IMAGE`. Brokers are shared by tests that do not disrupt them, disruptive tests run
+  three at a time, fixed delays became condition waits and CI builds once: a full run per version takes ~1.5 min
+  instead of 6–8.
 - GitHub Actions: `ci.yml` (build with warnings as errors, unit and integration tests, pack) and `release.yml` (tag
   `vX.Y.Z` → tests → package with SourceLink symbols → nuget.org via Trusted Publishing → GitHub release).
 

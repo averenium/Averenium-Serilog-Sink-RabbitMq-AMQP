@@ -9,17 +9,18 @@ namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests;
 /// '/' in the URI path is a separator, so the name has to be encoded as %2F. Verified with the broker's own
 /// <c>rabbitmqctl list_queues -p /data</c>, independent of our URI handling.
 /// </summary>
-[NotInParallel]
-public sealed class VirtualHostTests
+[ClassDataSource<SharedRabbitMq>(Shared = SharedType.PerTestSession)]
+public sealed class VirtualHostTests(SharedRabbitMq broker)
 {
-    private const string SlashVirtualHost = "/data";
+    /// <summary>A unique virtual host with a leading slash, like <c>/data</c> (tests share one broker).</summary>
+    private static string NewSlashVirtualHost() => "/data-" + Guid.NewGuid().ToString("N")[..8];
 
     [Test]
     public async Task Virtual_host_option_with_a_leading_slash_is_used_as_is(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
-        await node.AddVirtualHostAsync(SlashVirtualHost, ct);
+        var node = broker.Node;
+        var virtualHost = NewSlashVirtualHost();
+        await node.AddVirtualHostAsync(virtualHost, ct);
         var topology = TestTopology.Unique();
 
         await LogThreeAsync(o =>
@@ -27,41 +28,42 @@ public sealed class VirtualHostTests
             o.Hostnames.Add(node.HostAndPort);
             o.Username = RabbitMqNode.User;
             o.Password = RabbitMqNode.Password;
-            o.VirtualHost = SlashVirtualHost;
+            o.VirtualHost = virtualHost;
         }, topology);
 
-        await AssertThreeMessagesInSlashVirtualHostAsync(node, topology, ct);
+        await AssertThreeMessagesInVirtualHostAsync(node, virtualHost, topology, ct);
     }
 
     [Test]
     public async Task Uri_with_an_encoded_slash_reaches_the_same_virtual_host(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
-        await node.AddVirtualHostAsync(SlashVirtualHost, ct);
+        var node = broker.Node;
+        var virtualHost = NewSlashVirtualHost();
+        await node.AddVirtualHostAsync(virtualHost, ct);
         var topology = TestTopology.Unique();
 
         await LogThreeAsync(o => o.Hostnames.Add(
-            $"amqp://{RabbitMqNode.User}:{RabbitMqNode.Password}@{node.HostAndPort}/%2Fdata"), topology);
+            $"amqp://{RabbitMqNode.User}:{RabbitMqNode.Password}@{node.HostAndPort}/%2F{virtualHost[1..]}"), topology);
 
-        await AssertThreeMessagesInSlashVirtualHostAsync(node, topology, ct);
+        await AssertThreeMessagesInVirtualHostAsync(node, virtualHost, topology, ct);
         await Assert.That(await node.ListQueuesAsync("/", ct)).DoesNotContain(topology.Queue)
             .Because("nothing must land in the default virtual host");
     }
 
     /// <summary>rabbitmqctl statistics for quorum queues are refreshed periodically, so poll until they catch up.</summary>
-    private static async Task AssertThreeMessagesInSlashVirtualHostAsync(RabbitMqNode node, TestTopology topology, CancellationToken ct)
+    private static async Task AssertThreeMessagesInVirtualHostAsync(
+        RabbitMqNode node, string virtualHost, TestTopology topology, CancellationToken ct)
     {
         var expected = $"{topology.Queue}\t3";
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
         string queues;
-        while (!(queues = await node.ListQueuesAsync(SlashVirtualHost, ct)).Contains(expected, StringComparison.Ordinal)
+        while (!(queues = await node.ListQueuesAsync(virtualHost, ct)).Contains(expected, StringComparison.Ordinal)
                && DateTime.UtcNow < deadline)
         {
             await Task.Delay(1_000, ct);
         }
 
-        await Assert.That(queues).Contains(expected).Because($"rabbitmqctl list_queues -p /data: {queues}");
+        await Assert.That(queues).Contains(expected).Because($"rabbitmqctl list_queues -p {virtualHost}: {queues}");
     }
 
     private static async Task LogThreeAsync(Action<RabbitMqAmqpSinkOptions> connection, TestTopology topology)

@@ -11,8 +11,8 @@ namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests;
 /// Failure scenarios against real RabbitMQ 4 brokers. Each test owns its broker(s) because it stops,
 /// restarts or disrupts them. Run one at a time to keep container start-up predictable.
 /// </summary>
-[NotInParallel]
-public sealed class ConnectionResilienceTests
+[ClassDataSource<SharedRabbitMq>(Shared = SharedType.PerTestSession)]
+public sealed class ConnectionResilienceTests(SharedRabbitMq broker)
 {
     private static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan StateTimeout = TimeSpan.FromSeconds(30);
@@ -20,8 +20,7 @@ public sealed class ConnectionResilienceTests
     [Test]
     public async Task Connects_and_publish_is_accepted(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         await using var harness = new SupervisorHarness([node.AmqpUri], topology);
@@ -33,6 +32,7 @@ public sealed class ConnectionResilienceTests
     }
 
     [Test]
+    [ParallelLimiter<DisruptiveBrokerTests>]
     public async Task Broker_down_at_startup_connects_once_it_comes_up(CancellationToken ct)
     {
         await using var node = new RabbitMqNode();
@@ -40,19 +40,20 @@ public sealed class ConnectionResilienceTests
         await using var harness = new SupervisorHarness([node.AmqpUri], topology);
 
         harness.Supervisor.Start();
-        await Eventually.TrueAsync(() => harness.History.Contains(SupervisorState.Faulted),
+        await Eventually.TrueAsync(() => harness.History.Count(s => s == SupervisorState.Faulted) >= 2,
             "connect to a stopped broker fails and is retried", StateTimeout, ct);
-        await Task.Delay(TimeSpan.FromSeconds(2), ct);
         await Assert.That(harness.Supervisor.State).IsNotEqualTo(SupervisorState.Ready);
 
         await node.StartAsync(ct);
         await node.DeclareTopologyAsync(topology, ct);
 
         await harness.WaitReadyAsync(ReadyTimeout, ct);
-        await Assert.That(await harness.PublishAsync("after start", ct)).IsEqualTo(OutcomeState.Accepted);
+        // The supervisor may connect before the topology above is declared (race with the test, not with the sink).
+        await Assert.That(await harness.PublishUntilAcceptedAsync("after start", ReadyTimeout, ct)).IsEqualTo(OutcomeState.Accepted);
     }
 
     [Test]
+    [ParallelLimiter<DisruptiveBrokerTests>]
     public async Task Broker_restart_is_survived(CancellationToken ct)
     {
         await using var node = new RabbitMqNode();
@@ -76,6 +77,7 @@ public sealed class ConnectionResilienceTests
     }
 
     [Test]
+    [ParallelLimiter<DisruptiveBrokerTests>]
     public async Task Forcefully_closed_connection_is_recovered(CancellationToken ct)
     {
         await using var node = new RabbitMqNode();
@@ -97,6 +99,7 @@ public sealed class ConnectionResilienceTests
     }
 
     [Test]
+    [ParallelLimiter<DisruptiveBrokerTests>]
     public async Task Fails_over_to_the_next_node_when_the_current_one_stops(CancellationToken ct)
     {
         await using var nodeA = new RabbitMqNode();
@@ -127,8 +130,7 @@ public sealed class ConnectionResilienceTests
     [Test]
     public async Task Missing_target_exchange_keeps_supervisor_out_of_ready_until_declared_again(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         await using var harness = new SupervisorHarness([node.AmqpUri], topology);
@@ -152,9 +154,8 @@ public sealed class ConnectionResilienceTests
         await Assert.That(kind).IsEqualTo(OutcomeKind.TargetMissing);
         harness.Supervisor.ReportTargetMissing(publisher);
 
-        await Eventually.TrueAsync(() => harness.History.Contains(SupervisorState.Faulted),
-            "re-attaching to a missing exchange fails, so the supervisor stays out of Ready", StateTimeout, ct);
-        await Task.Delay(TimeSpan.FromSeconds(2), ct);
+        await Eventually.TrueAsync(() => harness.History.Count(s => s == SupervisorState.Faulted) >= 2,
+            "re-attaching to a missing exchange fails and is retried, so the supervisor stays out of Ready", StateTimeout, ct);
         await Assert.That(harness.Supervisor.State).IsNotEqualTo(SupervisorState.Ready);
 
         await node.DeclareTopologyAsync(topology, ct);

@@ -15,7 +15,12 @@ namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests.Infrastructure;
 /// </summary>
 internal sealed class RabbitMqNode : IAsyncDisposable
 {
-    public const string Image = "rabbitmq:4-management";
+    /// <summary>
+    /// Broker image: <c>RABBITMQ_IMAGE</c> (CI runs the suite once per minor version, e.g. <c>rabbitmq:4.2-management</c> —
+    /// the latest patch of that minor), otherwise the latest 4.x.
+    /// </summary>
+    public static readonly string Image =
+        Environment.GetEnvironmentVariable("RABBITMQ_IMAGE") is { Length: > 0 } image ? image : "rabbitmq:4-management";
     public const string User = "test";
     public const string Password = "test";
 
@@ -202,6 +207,23 @@ internal sealed class RabbitMqNode : IAsyncDisposable
             {
                 await Task.Delay(200, ct);
             }
+            catch (Exception ex)
+            {
+                await WriteBrokerLogAsync($"did not accept connections within {timeout}; last error: {ex}");
+                throw;
+            }
+        }
+    }
+
+    /// <summary>Writes the broker's recent log to the test output — the only way to see why it did not come up (CI).</summary>
+    public async Task WriteBrokerLogAsync(string reason)
+    {
+        var (stdout, stderr) = await _container.GetLogsAsync(DateTime.UtcNow.AddMinutes(-3), DateTime.UtcNow.AddMinutes(1));
+        var lines = (stdout + stderr).Split('\n');
+        Console.WriteLine($"--- RabbitMQ {Image} on port {Port}: {reason}; state {_container.State}; last broker log lines:");
+        foreach (var line in lines.TakeLast(60))
+        {
+            Console.WriteLine(line);
         }
     }
 

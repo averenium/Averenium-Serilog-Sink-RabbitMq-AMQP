@@ -38,8 +38,9 @@ interrupted, so an event can — rarely — reach both the broker and the fallba
 
 **Configuration problems** (wrong credentials or permissions, missing virtual host, a queue that exists with another
 type) are reported once to the failure listener and as `CONFIGURATION ERROR` in `SelfLog`; the sink keeps retrying, so
-fixing the broker side is enough. A missing exchange without `DeclareTopology` can only be inferred, so it is reported
-as *probable* after 5 failed attaches on a working connection.
+fixing the broker side is enough. A missing exchange without `DeclareTopology` is reported right away on RabbitMQ 4.4+ (the broker refuses the link);
+RabbitMQ 4.0 only lets the attach time out, so there it is reported as *probable* after 5 failed attaches on a
+working connection.
 
 ## Fallbacks
 

@@ -5,7 +5,7 @@ using Serilog.Events;
 namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests;
 
 /// <summary><c>FallbackAfter</c>: during a long outage events go to the fallback on time instead of waiting.</summary>
-[NotInParallel]
+[ParallelLimiter<DisruptiveBrokerTests>]
 public sealed class FallbackAfterTests
 {
     [Test]
@@ -29,6 +29,7 @@ public sealed class FallbackAfterTests
                     o.MinReconnectDelay = TimeSpan.FromMilliseconds(200);
                     o.MaxReconnectDelay = TimeSpan.FromSeconds(1);
                     o.ShutdownTimeout = TimeSpan.FromSeconds(30);
+                    o.ClientRecoveryTimeout = TimeSpan.FromSeconds(5); // abandon a stalled client recovery (C13) sooner
                 }),
                 wt => wt.Sink(fallback))
             .CreateLogger();
@@ -51,11 +52,30 @@ public sealed class FallbackAfterTests
 
         await node.StartAsync(ct);
         await node.WaitUntilAcceptingConnectionsAsync(TimeSpan.FromSeconds(60), ct);
-        logger.Information("After the outage");
+
+        // The sink reconnects on its own schedule — possibly only after the supervisor gave up on a stalled client
+        // recovery (C13). Until then, events logged now also go to the fallback after 2 s, which is correct; so keep
+        // logging until one reaches the broker again.
+        var after = 0;
+        deadline = DateTime.UtcNow.AddSeconds(60);
+        while (await node.MessageCountAsync(topology.Queue, ct) < 2)
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                Assert.Fail("No event reached the broker within 60 s after it came back.");
+            }
+
+            logger.Information("After the outage {N}", after++);
+            await Task.Delay(500, ct);
+        }
+
         await logger.DisposeAsync();
 
-        await Assert.That(await node.MessageCountAsync(topology.Queue, ct)).IsEqualTo(2UL);
-        await Assert.That(fallback.Count).IsEqualTo(10);
+        var delivered = await node.MessageCountAsync(topology.Queue, ct);
+        await Assert.That(delivered).IsGreaterThanOrEqualTo(2UL);
+        await Assert.That(fallback.Count).IsGreaterThanOrEqualTo(10).Because("the outage events went to the fallback");
+        await Assert.That((ulong)fallback.Count + delivered).IsGreaterThanOrEqualTo((ulong)(1 + 10 + after))
+            .Because("no silent loss: every event reached the broker or the fallback");
     }
 
     private sealed class CountingSink : ILogEventSink

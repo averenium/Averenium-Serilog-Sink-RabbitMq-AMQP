@@ -12,7 +12,7 @@ and outages of any length without losing logs, never blocks your app, needs no d
 dotnet add package Averenium.Serilog.Sinks.RabbitMQ.Amqp
 ```
 
-Requires .NET 10 and RabbitMQ 4.0+.
+Requires .NET 10 and RabbitMQ 4.0+ (tested on 4.0–4.4).
 
 ## Quick start — code
 
@@ -154,6 +154,7 @@ client connection recovery, no `RabbitMQ.Client` dependency. Comparison with exi
 dotnet build -c Release
 dotnet test --project tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Tests
 dotnet test --project tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests   # needs Docker or Podman
+RABBITMQ_IMAGE=rabbitmq:4.0-management dotnet test --project tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests   # a specific minor
 ```
 
 | Path | Contents |

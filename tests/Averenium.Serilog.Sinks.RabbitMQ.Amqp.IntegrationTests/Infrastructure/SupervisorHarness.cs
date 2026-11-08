@@ -29,9 +29,12 @@ internal sealed class SupervisorHarness : IAsyncDisposable
                 ConnectTimeout = TimeSpan.FromSeconds(10),
                 PublisherRecoveryGrace = TimeSpan.FromSeconds(5),
                 HealthCheckInterval = TimeSpan.FromMilliseconds(500),
+                // A stalled client recovery (C13) is abandoned after 5 s here instead of MaxReconnectDelay + 15 s.
+                ClientRecoveryTimeout = TimeSpan.FromSeconds(5),
             });
 
-        // Diagnostics: TUnit shows console output per test. The class is [NotInParallel], so the global SelfLog is fine.
+        // Diagnostics only: SelfLog is global, so with disruptive tests running side by side (DisruptiveBrokerTests)
+        // a line can show up in another test's output. Nothing asserts on it.
         SelfLog.Enable(m => Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} selflog {m}"));
         Supervisor.StateChanged += s =>
         {
@@ -75,6 +78,33 @@ internal sealed class SupervisorHarness : IAsyncDisposable
         var publisher = await WaitReadyAsync(TimeSpan.FromSeconds(30), ct);
         var result = await publisher.PublishAsync(new AmqpMessage(body), ct).WaitAsync(TimeSpan.FromSeconds(10), ct);
         return result.Outcome.State;
+    }
+
+    /// <summary>
+    /// Publishes until the broker accepts, handling a missing target the way the sink's publish loop does
+    /// (<c>Rejected amqp:not-found</c> → <see cref="ConnectionSupervisor.ReportTargetMissing"/> → rebuild). Newer brokers
+    /// (4.2+) may let a publisher attach before its exchange exists and then reject publishes.
+    /// </summary>
+    public async Task<OutcomeState> PublishUntilAcceptedAsync(string body, TimeSpan timeout, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (true)
+        {
+            var publisher = await WaitReadyAsync(TimeSpan.FromSeconds(30), ct);
+            var result = await publisher.PublishAsync(new AmqpMessage(body), ct).WaitAsync(TimeSpan.FromSeconds(10), ct);
+            if (result.Outcome.State == OutcomeState.Accepted || DateTime.UtcNow > deadline)
+            {
+                return result.Outcome.State;
+            }
+
+            Log($"publish {result.Outcome.State} ({result.Outcome.Error}); retrying");
+            if (result.Outcome.Error?.ErrorCode == "amqp:not-found")
+            {
+                Supervisor.ReportTargetMissing(publisher);
+            }
+
+            await Task.Delay(200, ct);
+        }
     }
 
     public async ValueTask DisposeAsync()

@@ -68,6 +68,47 @@ public sealed class ConnectionSupervisorTests : IAsyncDisposable
     }
 
     [Test]
+    public async Task Client_recovery_that_never_finishes_is_abandoned_and_the_connection_rebuilt(CancellationToken ct)
+    {
+        // Seen against real brokers: a recovery attempt that starts while a node goes away can hang in TCP connect for
+        // minutes (SYN to a vanished address), and the client's sequential recovery has no timeout of its own (C13).
+        _supervisor.Start();
+        await Eventually.TrueAsync(() => _supervisor.State == SupervisorState.Ready, "connected", ct);
+        var stuck = _broker.Last!;
+        stuck.SetConnectionState(State.Reconnecting);
+        stuck.SetPublisherState(State.Reconnecting);
+        await Eventually.TrueAsync(() => _supervisor.State == SupervisorState.Recovering, "client recovering", ct);
+
+        await Eventually.TrueWhileAdvancingAsync(_time, Step,
+            () => _broker.ConnectAttempts == 2 && _supervisor.State == SupervisorState.Ready,
+            "the supervisor stops waiting for the client and connects by itself", ct);
+
+        await Assert.That(stuck.ConnectionClosed).IsTrue();
+    }
+
+    [Test]
+    public async Task Client_recovery_that_finishes_within_its_grace_is_not_interrupted(CancellationToken ct)
+    {
+        _supervisor.Start();
+        await Eventually.TrueAsync(() => _supervisor.State == SupervisorState.Ready, "connected", ct);
+        var connection = _broker.Last!;
+        connection.SetConnectionState(State.Reconnecting);
+        connection.SetPublisherState(State.Reconnecting);
+        await Eventually.TrueAsync(() => _supervisor.State == SupervisorState.Recovering, "client recovering", ct);
+
+        for (var second = 0; second < 15; second++)
+        {
+            _time.Advance(Step);
+            await Task.Delay(10, ct);
+        }
+
+        connection.SetConnectionState(State.Open);
+        connection.SetPublisherState(State.Open);
+        await Eventually.TrueAsync(() => _supervisor.State == SupervisorState.Ready, "recovered by the client", ct);
+        await Assert.That(_broker.ConnectAttempts).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task Client_recovery_goes_through_recovering_back_to_ready_without_rebuild(CancellationToken ct)
     {
         _supervisor.Start();
@@ -138,22 +179,26 @@ public sealed class ConnectionSupervisorTests : IAsyncDisposable
     }
 
     [Test]
-    public async Task Long_client_recovery_is_never_interrupted(CancellationToken ct)
+    public async Task During_a_long_outage_the_supervisor_keeps_reconnecting_by_itself_after_the_recovery_grace(CancellationToken ct)
     {
         _supervisor.Start();
         await Eventually.TrueAsync(() => _supervisor.State == SupervisorState.Ready, "connected", ct);
         var connection = _broker.Last!;
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            _broker.FailNextConnect(new InvalidOperationException("broker still down"));
+        }
 
         connection.SetConnectionState(State.Reconnecting);
         connection.SetPublisherState(State.Reconnecting);
         for (var i = 0; i < 20; i++)
         {
             _time.Advance(TimeSpan.FromMinutes(1));
-            await Task.Delay(5, ct);
+            await Task.Delay(10, ct);
         }
 
-        await Assert.That(_supervisor.State).IsEqualTo(SupervisorState.Recovering);
-        await Assert.That(_broker.ConnectAttempts).IsEqualTo(1);
+        await Assert.That(_broker.ConnectAttempts).IsGreaterThan(2).Because("bounded attempts of its own, endlessly");
+        await Assert.That(_supervisor.State).IsNotEqualTo(SupervisorState.Ready);
     }
 
     [Test]

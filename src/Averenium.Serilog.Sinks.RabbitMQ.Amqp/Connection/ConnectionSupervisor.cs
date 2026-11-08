@@ -14,8 +14,8 @@ namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.Connection;
 /// <list type="bullet">
 /// <item>connects lazily in the background and retries the initial connect forever (the client does not);</item>
 /// <item>lets the client's automatic recovery handle short outages and node failover;</item>
-/// <item>rebuilds connection and publisher when the client gives up, a publisher is stuck,
-/// or publishes keep timing out;</item>
+/// <item>rebuilds connection and publisher when the client gives up, its recovery does not finish in time (C13),
+/// a publisher is stuck, or publishes keep timing out;</item>
 /// <item>reconnects through a new environment when the credentials changed (<see cref="IEnvironmentSource.Changed"/>,
 /// no polling) — the client keeps the credentials it was built with (C12).</item>
 /// </list>
@@ -352,6 +352,7 @@ internal sealed class ConnectionSupervisor : IPublisherProvider, IAsyncDisposabl
         Volatile.Write(ref _currentPublisher, publisher);
 
         long? publisherNotOpenSince = null;
+        long? reconnectingSince = null;
         while (true)
         {
             ct.ThrowIfCancellationRequested();
@@ -392,18 +393,28 @@ internal sealed class ConnectionSupervisor : IPublisherProvider, IAsyncDisposabl
 
             if (connectionState == global::RabbitMQ.AMQP.Client.State.Reconnecting)
             {
-                // Client-driven recovery (endless back-off, round-robin over nodes).
+                // Client-driven recovery (endless back-off, round-robin over nodes) — but not for ever: one of its
+                // attempts can hang in TCP connect for minutes (C13), and it has no timeout of its own.
                 publisherNotOpenSince = null;
                 SetState(SupervisorState.Recovering);
+                reconnectingSince ??= _time.GetTimestamp();
+                if (_time.GetElapsedTime(reconnectingSince.Value) >= _options.EffectiveClientRecoveryTimeout)
+                {
+                    SelfLog.WriteLine(LogPrefix + "Client recovery has not finished within {0}; rebuilding the connection.",
+                        _options.EffectiveClientRecoveryTimeout);
+                    return;
+                }
             }
             else if (publisherState == global::RabbitMQ.AMQP.Client.State.Open)
             {
                 publisherNotOpenSince = null;
+                reconnectingSince = null;
                 SetState(SupervisorState.Ready, publisher);
             }
             else
             {
                 // Connection is open but the publisher is still re-attaching (C4).
+                reconnectingSince = null;
                 SetState(SupervisorState.Recovering);
                 publisherNotOpenSince ??= _time.GetTimestamp();
                 if (_time.GetElapsedTime(publisherNotOpenSince.Value) >= _options.PublisherRecoveryGrace)

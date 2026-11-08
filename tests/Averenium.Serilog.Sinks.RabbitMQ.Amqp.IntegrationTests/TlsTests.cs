@@ -8,15 +8,14 @@ namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests;
 /// AMQPS against a broker with a certificate from a private CA — the usual set-up inside a cluster. The client trusts
 /// that CA through <c>TlsCaCertificatePath</c> only (nothing is installed into the OS trust store).
 /// </summary>
-[NotInParallel]
-public sealed class TlsTests
+[ClassDataSource<SharedTlsRabbitMq>(Shared = SharedType.PerTestSession)]
+public sealed class TlsTests(SharedTlsRabbitMq tls)
 {
     [Test]
     public async Task Events_are_delivered_over_tls_with_a_private_ca(CancellationToken ct)
     {
-        using var pki = new TestPki();
-        await using var node = new RabbitMqNode(pki);
-        await node.StartAsync(ct);
+        var pki = tls.Pki;
+        var node = tls.Node;
         var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         var fallback = new CountingSink();
@@ -41,10 +40,8 @@ public sealed class TlsTests
     [Test]
     public async Task Mutual_tls_with_sasl_external_authenticates_by_client_certificate(CancellationToken ct)
     {
-        using var pki = new TestPki();
-        await using var node = new RabbitMqNode(pki);
-        await node.StartAsync(ct);
-        await node.AddUserAsync(TestPki.ClientUser, ct);
+        var pki = tls.Pki;
+        var node = tls.Node;
         var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         var fallback = new CountingSink();
@@ -70,9 +67,8 @@ public sealed class TlsTests
     [Test]
     public async Task A_broker_certificate_from_an_untrusted_ca_is_refused_and_events_reach_the_fallback(CancellationToken ct)
     {
-        using var pki = new TestPki();
-        await using var node = new RabbitMqNode(pki);
-        await node.StartAsync(ct);
+        var pki = tls.Pki;
+        var node = tls.Node;
         var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         var fallback = new CountingSink();
@@ -89,8 +85,7 @@ public sealed class TlsTests
             logger.Information("Refused {N}", i);
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(2), ct);
-        await logger.DisposeAsync();
+        await logger.DisposeAsync(); // the shutdown budget decides: nothing can be delivered, all goes to the fallback
 
         await Assert.That(await node.MessageCountAsync(topology.Queue, ct)).IsEqualTo(0UL);
         await Assert.That(fallback.Count).IsEqualTo(3).Because("no silent loss even when TLS cannot be established");

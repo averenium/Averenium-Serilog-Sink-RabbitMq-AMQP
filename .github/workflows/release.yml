@@ -3,7 +3,8 @@
 #   git tag v0.1.0          # or v0.2.0-preview.1 for a pre-release
 #   git push origin v0.1.0
 #
-# The version comes from the tag. Everything is built and tested again before anything is published.
+# The version comes from the tag. Everything is built and tested again (integration tests on every supported RabbitMQ
+# minor, 4.0–4.4) before anything is published.
 #
 # Authentication: nuget.org Trusted Publishing (OIDC) — no long-lived API key in the repository.
 # One-time setup on nuget.org → your account → Trusted Publishing → add a policy:
@@ -71,8 +72,14 @@ jobs:
       - name: Unit tests
         run: dotnet test --project tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Tests -c Release --no-build
 
-      - name: Integration tests (RabbitMQ in Docker)
-        run: dotnet test --project tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests -c Release --no-build
+      # Built once here; every broker-version job of the matrix only downloads and runs it.
+      - name: Upload built integration tests
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-tests
+          path: tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests/bin/Release/net10.0/
+          if-no-files-found: error
+          retention-days: 1
 
       # nuget.org does not resolve relative links in the package README: point them at this tag on GitHub.
       - name: Absolute links in the package README
@@ -93,8 +100,16 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
 
-  publish:
+  # Extended check: nothing is published unless every supported RabbitMQ minor passes.
+  integration:
     needs: build
+    uses: ./.github/workflows/integration-tests.yml
+    with:
+      versions: '["4.0","4.1","4.2","4.3","4.4"]'
+      artifact: integration-tests
+
+  publish:
+    needs: [ build, integration ]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Add required reviewers to this environment (Settings → Environments) to approve every release by hand.

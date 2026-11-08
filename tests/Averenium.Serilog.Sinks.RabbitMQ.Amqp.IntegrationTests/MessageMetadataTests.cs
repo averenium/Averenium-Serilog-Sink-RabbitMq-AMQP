@@ -5,14 +5,13 @@ using Serilog;
 namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests;
 
 /// <summary>What a consumer actually receives: correlation-id from the trace, durability, message-id.</summary>
-[NotInParallel]
-public sealed class MessageMetadataTests
+[ClassDataSource<SharedRabbitMq>(Shared = SharedType.PerTestSession)]
+public sealed class MessageMetadataTests(SharedRabbitMq broker)
 {
     [Test]
     public async Task Consumers_receive_the_trace_id_as_correlation_id_and_durable_messages(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
 
@@ -37,8 +36,7 @@ public sealed class MessageMetadataTests
     [Test]
     public async Task Non_durable_messages_are_accepted_and_received_as_non_durable(CancellationToken ct)
     {
-        await using var node = new RabbitMqNode();
-        await node.StartAsync(ct);
+        var node = broker.Node;
         var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
 

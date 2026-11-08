@@ -1,0 +1,90 @@
+# Integration tests against real RabbitMQ brokers (Testcontainers), one job per RabbitMQ minor version.
+# Each tag such as rabbitmq:4.2-management is the latest patch of that minor.
+#
+#   - CI (ci.yml) calls it with the current versions only — the standard check on every push / pull request.
+#   - Release (release.yml) calls it with every supported minor before anything is published.
+#   - Run it by hand (Actions → Integration tests (extended) → Run workflow) before rolling out a new feature;
+#     by default it covers every supported minor, or pass your own JSON list.
+#
+# Callers that already built the solution pass the name of an artifact with the built integration tests; the jobs then
+# only download and run them. Without it (manual run) every job builds the tests itself.
+name: Integration tests (extended)
+
+on:
+  workflow_call:
+    inputs:
+      versions:
+        description: JSON list of RabbitMQ minor versions, e.g. ["4.3","4.4"]
+        type: string
+        required: true
+      artifact:
+        description: Artifact with the built integration tests (bin/Release/net10.0); empty = build here
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: JSON list of RabbitMQ minor versions
+        type: string
+        default: '["4.0","4.1","4.2","4.3","4.4"]'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  TESTS: Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests
+
+jobs:
+  integration:
+    name: RabbitMQ ${{ matrix.rabbitmq }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        rabbitmq: ${{ fromJSON(inputs.versions) }}
+    env:
+      RABBITMQ_IMAGE: rabbitmq:${{ matrix.rabbitmq }}-management
+    steps:
+      - uses: actions/checkout@v4
+        if: inputs.artifact == ''
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: ${{ inputs.artifact == '' && 'global.json' || '' }}
+          dotnet-version: ${{ inputs.artifact != '' && '10.0.x' || '' }}
+
+      - name: Pull broker image
+        run: |
+          docker pull "$RABBITMQ_IMAGE"
+          docker image inspect "$RABBITMQ_IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep RABBITMQ_VERSION
+
+      - name: Download built tests
+        if: inputs.artifact != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: integration-tests
+
+      - name: Integration tests (prebuilt)
+        if: inputs.artifact != ''
+        working-directory: integration-tests
+        run: dotnet "$TESTS.dll"
+
+      - name: Build
+        if: inputs.artifact == ''
+        run: dotnet build tests/$TESTS -c Release
+
+      - name: Integration tests
+        if: inputs.artifact == ''
+        run: dotnet test --project tests/$TESTS -c Release --no-build
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results-${{ matrix.rabbitmq }}
+          path: '**/TestResults/**'
+          if-no-files-found: ignore
