@@ -4,12 +4,12 @@
 [`RabbitMQ.AMQP.Client`](https://github.com/rabbitmq/rabbitmq-amqp-dotnet-client)). Survives broker restarts, failovers
 and outages of any length without losing logs, never blocks your app, needs no disk.
 
-> **Status:** pre-release (0.x) — the public API may still change and no package is published yet.
+> **Status:** preview (`0.1.0-preview-01`) — the public API may still change before 0.1.0.
 
 ## Install
 
 ```bash
-dotnet add package Averenium.Serilog.Sinks.RabbitMQ.Amqp
+dotnet add package Averenium.Serilog.Sinks.RabbitMQ.Amqp --prerelease
 ```
 
 Requires .NET 10 and RabbitMQ 4.0+ (tested on 4.0–4.4).

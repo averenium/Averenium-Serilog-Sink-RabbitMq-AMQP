@@ -222,9 +222,12 @@ unavailable, say so explicitly instead of claiming they pass.
 Releases are published by `.github/workflows/release.yml` when a `vX.Y.Z` (or `vX.Y.Z-preview.N`) tag is pushed;
 `ci.yml` builds and tests every push and pull request. Before tagging a commit on `main`:
 
-1. `CHANGELOG.md`: rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and add a new empty `[Unreleased]`.
-2. Move the lines of `PublicAPI.Unshipped.txt` into `PublicAPI.Shipped.txt` (keep `#nullable enable` at the top).
-3. Commit, then `git tag vX.Y.Z && git push origin vX.Y.Z` — only when the maintainer asks for it.
+1. `CHANGELOG.md`: rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add a new empty `[Unreleased]` and the
+   compare / tag links at the bottom.
+2. **Stable releases only:** move the lines of `PublicAPI.Unshipped.txt` into `PublicAPI.Shipped.txt` (keep
+   `#nullable enable` at the top). Previews (`X.Y.Z-preview-NN`) leave the API in `Unshipped` — it may still change.
+3. `VersionPrefix` in `Directory.Build.props` = the version being prepared (local builds; the tag sets the real one).
+4. Commit, then `git tag vX.Y.Z && git push origin vX.Y.Z` — only when the maintainer asks for it.
 
 The workflow takes the version from the tag, builds and runs all tests again, rewrites the README's relative links to
 the tag on GitHub (nuget.org does not resolve them), packs `.nupkg` + `.snupkg` and pushes them with nuget.org
