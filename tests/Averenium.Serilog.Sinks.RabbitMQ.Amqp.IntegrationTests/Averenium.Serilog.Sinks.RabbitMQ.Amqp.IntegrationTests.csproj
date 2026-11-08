@@ -8,6 +8,12 @@
   <ItemGroup>
     <PackageReference Include="TUnit" />
     <PackageReference Include="Testcontainers.RabbitMq" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests.Infrastructure" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,5 @@
 using Averenium.Serilog.Sinks.RabbitMQ.Amqp.Connection;
+using Averenium.Serilog.Sinks.RabbitMQ.Amqp.Connection.Models;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using RabbitMQ.AMQP.Client;
@@ -239,6 +240,110 @@ public sealed class ConnectionSupervisorTests : IAsyncDisposable
 
         await Assert.That(calls).IsEqualTo(2);
         await Assert.That(_broker.Connections[0].ConnectionClosed).IsTrue();
+    }
+
+    [Test]
+    public async Task Readiness_is_withdrawn_before_a_slow_teardown(CancellationToken ct)
+    {
+        _supervisor.Start();
+        var publisher = await _supervisor.WaitReadyAsync(ct);
+        var first = _broker.Last!;
+        first.CloseGate = new TaskCompletionSource(); // closing hangs until released
+
+        _supervisor.ReportTargetMissing(publisher);
+        await Eventually.TrueAsync(() => first.PublisherClosed, "teardown started", ct);
+
+        await Assert.That(_supervisor.State).IsEqualTo(SupervisorState.Faulted);
+        await Assert.That(_supervisor.WaitReadyAsync(ct).IsCompleted).IsFalse()
+            .Because("a publisher that is being closed must not be handed out");
+
+        first.CloseGate.SetResult();
+        await Eventually.TrueWhileAdvancingAsync(_time, Step, () => _supervisor.State == SupervisorState.Ready, "rebuilt", ct);
+        await Assert.That(await _supervisor.WaitReadyAsync(ct)).IsSameReferenceAs(_broker.Last!.Publisher);
+    }
+
+    [Test]
+    public async Task Configuration_errors_are_reported_once_per_distinct_error_and_retrying_continues(CancellationToken ct)
+    {
+        var reported = new List<string>();
+        _broker.FailNextConnect(new PreconditionFailedException("queue exists with another type, response code: 409"));
+        _broker.FailNextConnect(new PreconditionFailedException("queue exists with another type, response code: 409"));
+        _broker.FailNextConnect(new InvalidOperationException("ordinary outage"));
+        await using var supervisor = new ConnectionSupervisor(
+            _broker.Environment,
+            new ConnectionSupervisorOptions
+            {
+                MinReconnectDelay = TimeSpan.FromSeconds(1),
+                MaxReconnectDelay = TimeSpan.FromSeconds(1),
+                OnConfigurationError = (reason, _) =>
+                {
+                    lock (reported)
+                    {
+                        reported.Add(reason.Reason);
+                    }
+                },
+            },
+            _time);
+
+        supervisor.Start();
+        await Eventually.TrueWhileAdvancingAsync(_time, Step, () => supervisor.State == SupervisorState.Ready,
+            "keeps retrying until the broker side is fixed", ct);
+
+        await Assert.That(reported.Count).IsEqualTo(1);
+        await Assert.That(reported[0]).Contains("precondition failed");
+    }
+
+    [Test]
+    public async Task Repeated_attach_failures_on_a_working_connection_are_reported_as_configuration_error(CancellationToken ct)
+    {
+        var reported = new List<string>();
+        var created = 0;
+        _broker.OnCreated = c =>
+        {
+            if (Interlocked.Increment(ref created) <= ConfigurationErrorDetector.AttachFailuresBeforeReport)
+            {
+                // What the client does when the exchange is missing: the attach just times out.
+                c.Builder.BuildAsync(Arg.Any<CancellationToken>())
+                    .Returns(Task.FromException<IPublisher>(new TimeoutException("The operation has timed out.")));
+            }
+        };
+        await using var supervisor = new ConnectionSupervisor(
+            _broker.Environment,
+            new ConnectionSupervisorOptions
+            {
+                MinReconnectDelay = TimeSpan.FromSeconds(1),
+                MaxReconnectDelay = TimeSpan.FromSeconds(1),
+                OnConfigurationError = (reason, _) =>
+                {
+                    lock (reported)
+                    {
+                        reported.Add(reason.Reason);
+                    }
+                },
+            },
+            _time);
+
+        supervisor.Start();
+        await Eventually.TrueWhileAdvancingAsync(_time, Step, () => supervisor.State == SupervisorState.Ready,
+            "attaches once the target exists", ct);
+
+        await Assert.That(reported.Count).IsEqualTo(1);
+        await Assert.That(reported[0]).IsEqualTo(ConfigurationErrorDetector.AttachFailureReason);
+    }
+
+    [Test]
+    public async Task Dispose_with_a_budget_does_not_wait_for_hanging_closes(CancellationToken ct)
+    {
+        var broker = new FakeEnvironment { OnCreated = c => c.CloseGate = new TaskCompletionSource() };
+        var supervisor = new ConnectionSupervisor(broker.Environment, new ConnectionSupervisorOptions(), TimeProvider.System);
+        supervisor.Start();
+        await supervisor.WaitReadyAsync(ct).WaitAsync(TimeSpan.FromSeconds(5), ct);
+
+        var started = DateTime.UtcNow;
+        await supervisor.DisposeAsync(TimeSpan.FromMilliseconds(300));
+
+        await Assert.That(DateTime.UtcNow - started).IsLessThan(TimeSpan.FromSeconds(2))
+            .Because("publisher, connection and environment share one 300 ms budget instead of 5 s each");
     }
 
     [Test]

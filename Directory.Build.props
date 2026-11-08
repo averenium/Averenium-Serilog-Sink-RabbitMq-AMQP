@@ -17,9 +17,19 @@
     <Authors>Averenium</Authors>
     <Company>Averenium</Company>
     <Copyright>Copyright © Averenium</Copyright>
-    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/averenium/Averenium-Serilog-Sink-RabbitMq-AMQP</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/averenium/Averenium-Serilog-Sink-RabbitMq-AMQP</PackageProjectUrl>
     <PackageTags>serilog;sink;rabbitmq;amqp;amqp10;logging</PackageTags>
+  </PropertyGroup>
+
+  <PropertyGroup Label="SourceLink">
+    <!-- The .NET SDK includes SourceLink: the repository URL and commit come from git; sources are linked in the .snupkg. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <!-- Deterministic paths in CI builds (GitHub Actions sets GITHUB_ACTIONS=true). -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
 </Project>

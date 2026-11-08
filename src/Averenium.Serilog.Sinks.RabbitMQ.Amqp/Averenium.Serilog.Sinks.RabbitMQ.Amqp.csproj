@@ -15,6 +15,7 @@
     <PackageReference Include="RabbitMQ.AMQP.Client" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.Formatting.Compact" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 

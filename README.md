@@ -1,71 +1,65 @@
 # Averenium.Serilog.Sinks.RabbitMQ.Amqp
 
-A [Serilog](https://serilog.net) sink that writes log events to **RabbitMQ 4.x over AMQP 1.0**,
-built on the official [`RabbitMQ.AMQP.Client`](https://github.com/rabbitmq/rabbitmq-amqp-dotnet-client).
+[Serilog](https://serilog.net) sink for **RabbitMQ 4.x over AMQP 1.0** (official
+[`RabbitMQ.AMQP.Client`](https://github.com/rabbitmq/rabbitmq-amqp-dotnet-client)). Survives broker restarts, failovers
+and outages of any length without losing logs, never blocks your app, needs no disk.
 
 > **Status:** pre-release (0.x) — the public API may still change and no package is published yet.
 
-## Why another RabbitMQ sink?
-
-Existing Serilog RabbitMQ sinks use `RabbitMQ.Client`, which speaks AMQP 0-9-1.
-RabbitMQ 4.0 made AMQP 1.0 a core protocol, and RabbitMQ ships a dedicated AMQP 1.0 client for .NET.
-This sink uses that client, so you get:
-
-- AMQP 1.0 addressing (`/exchanges/{name}/{key}`, `/queues/{name}`) and per-message publish outcomes;
-- automatic connection recovery from the client;
-- no dependency on `RabbitMQ.Client`.
-
-## Requirements
-
-- .NET 10
-- RabbitMQ **4.0 or newer** (AMQP 1.0 enabled by default)
-
-## Installation
+## Install
 
 ```bash
 dotnet add package Averenium.Serilog.Sinks.RabbitMQ.Amqp
 ```
 
-## Usage
+Requires .NET 10 and RabbitMQ 4.0+.
+
+## Quick start — code
 
 ```csharp
-using Serilog;
-
 Log.Logger = new LoggerConfiguration()
     .WriteTo.FallbackChain(
-        wt => wt.RabbitMQAmqp(options =>
+        wt => wt.RabbitMQAmqp(o =>
         {
-            // every cluster node — the sink fails over between them round-robin
-            options.Uris.Add(new Uri("amqp://app:secret@rabbit-1:5672/"));
-            options.Uris.Add(new Uri("amqp://app:secret@rabbit-2:5672/"));
-            options.Uris.Add(new Uri("amqp://app:secret@rabbit-3:5672/"));
-            options.Exchange = "logs";
-            options.RoutingKey = "billing";
+            o.Hostnames.Add("rabbit-1");            // add every cluster node
+            o.Hostnames.Add("rabbit-2");
+            o.Username = "app";
+            o.Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD");
+            o.Exchange = "logs";
+            o.RoutingKey = "billing";
         }),
-        // optional: whatever could not be delivered (buffer overflow, shutdown timeout) goes here
-        wt => wt.Console())
+        wt => wt.Console())                         // gets whatever could not be delivered
     .CreateLogger();
 
-Log.Information("Hello from {Protocol}", "AMQP 1.0");
-
-await Log.CloseAndFlushAsync(); // delivers buffered events (up to ShutdownTimeout)
+// on shutdown — delivers what is buffered (bounded by ShutdownTimeout)
+await Log.CloseAndFlushAsync();
 ```
 
-From `appsettings.json` (via `Serilog.Settings.Configuration`):
+## Quick start — appsettings.json
+
+Needs [Serilog.Settings.Configuration](https://github.com/serilog/serilog-settings-configuration) (included in
+`Serilog.AspNetCore`): `builder.Services.AddSerilog((s, lc) => lc.ReadFrom.Configuration(builder.Configuration));`
 
 ```json
 {
   "Serilog": {
-    "Using": [ "Averenium.Serilog.Sinks.RabbitMQ.Amqp" ],
+    "Using": [ "Serilog.Sinks.Console", "Averenium.Serilog.Sinks.RabbitMQ.Amqp" ],
     "WriteTo": [
       {
-        "Name": "RabbitMQAmqp",
+        "Name": "FallbackChain",
         "Args": {
-          "uris": "amqp://app:secret@rabbit-1:5672/;amqp://app:secret@rabbit-2:5672/",
-          "exchange": "logs",
-          "routingKey": "billing",
-          "declareTopology": true,
-          "declareQueue": "logs.billing"
+          "configureSink": [
+            {
+              "Name": "RabbitMQAmqp",
+              "Args": {
+                "hostnames": [ "rabbit-1", "rabbit-2" ],
+                "username": "app",
+                "exchange": "logs",
+                "routingKey": "billing"
+              }
+            }
+          ],
+          "configureFallback": [ { "Name": "Console" } ]
         }
       }
     ]
@@ -73,87 +67,101 @@ From `appsettings.json` (via `Serilog.Settings.Configuration`):
 }
 ```
 
-### How delivery works
+Set the password from a secret, e.g. `Serilog__WriteTo__0__Args__configureSink__0__Args__password`. Without a fallback,
+use `"Name": "RabbitMQAmqp"` directly in `WriteTo`. `hostnames` must be a JSON array.
 
-- `Log.*` calls only put the event into a bounded in-memory buffer — they never block on the network and never throw.
-  Logger creation does not fail or wait when the broker is down; the sink connects in the background.
-- A background loop publishes messages concurrently and waits for the broker outcome of **each** message.
-  A message leaves the buffer only when RabbitMQ accepted it, or when it is reported to the Serilog failure listener
-  (so `WriteTo.FallbackChain(...)` receives it). Nothing is dropped silently.
-- **At-least-once**: after a connection loss a message may be delivered twice. Every message carries a unique
-  `message-id` for de-duplication.
-- Broker restarts, node crashes, network blips and failovers are handled automatically and for as long as they last;
-  events accumulate in the buffer meanwhile (up to `QueueLimit`, then `OverflowPolicy`).
-- If the target exchange/queue disappears, messages are kept and the sink reconnects (re-declaring the topology when
-  `DeclareTopology` is on) instead of dropping logs.
-- No disk is used, by design (containers / Kubernetes).
+## Options you will most likely set
 
-### Message format
-
-| AMQP field | Value |
-|---|---|
-| body | event formatted by `Formatter` (default compact JSON / CLEF), UTF-8 |
-| `message-id` | unique per event, stable across retries |
-| `content-type` | `ContentType` (default `application/json`) |
-| `creation-time` | event timestamp (UTC) |
-| application property `level` | `Information`, `Error`, ... |
-| application property `source-context` | `SourceContext` of the event, if any |
-| durable | yes |
-
-Use `RoutingKeySelector` to route by event (e.g. by level) and `ConfigureMessage` to add your own properties.
-
-### Options
-
-| Option | Default | Description |
+| Option | Default | |
 |---|---|---|
-| `Uris` | — | one or more `amqp://` / `amqps://` URIs (same vhost) |
+| `Hostnames` | — | cluster nodes: `host`, `host:port` or `amqp(s)://` URIs |
+| `Username` / `Password` | — | rotated values from the configuration are picked up without a restart |
+| `VirtualHost` | `/` | |
 | `Exchange` + `RoutingKey`, or `Queue` | — | publish target |
-| `RoutingKeySelector` | — | per-event routing key (needs `Exchange`) |
-| `ConfigureMessage` | — | adjust each outgoing message |
-| `Formatter` / `ContentType` | compact JSON / `application/json` | body format |
-| `ConnectionName` | `<entry assembly>@<machine>` | shown in the management UI |
-| `QueueLimit` | 100 000 | events buffered in memory |
-| `OverflowPolicy` | `DropOldest` | `DropOldest` keeps recent logs, `DropNewest` keeps the start of an incident |
-| `BatchSizeLimit` | 500 | messages in flight at once |
-| `PublishTimeout` | 30 s | wait for one broker outcome before retrying |
-| `MaxReleasedRetries` | 5 | retries for messages the broker released (e.g. unroutable) |
-| `MinReconnectDelay` / `MaxReconnectDelay` | 0.5 s / 30 s | reconnect back-off; reconnecting never stops |
-| `ShutdownTimeout` | 10 s | time to deliver buffered events on dispose |
-| `DeclareTopology` | `false` | declare exchange (`ExchangeType`, default `topic`) and quorum queue `DeclareQueue` bound with `BindingKey` after every connect |
+| `DeclareTopology` + `DeclareQueue` | off | create exchange and quorum queue on connect |
+| `UseTls`, `Tls.CaCertificatePath` | off | TLS with a private CA — see [TLS](docs/guide/tls.md) |
+| `Formatter` | compact JSON (CLEF) | see [Message format](docs/guide/message-format.md) |
+| `QueueSizeLimitBytes` | 15 MiB | memory for logs buffered during an outage |
+| `FallbackAfter` | off | hand events to the fallback if not delivered within this time |
+| `ShutdownTimeout` | 10 s | upper bound for the whole shutdown |
 
-### Recommendations for clusters
+All options: [Options reference](docs/guide/options.md).
 
-- List all nodes in `Uris` (or put a load balancer in front).
-- Store logs in a **quorum queue** (or a stream): classic queues live on a single node.
-- Add a fallback sink (e.g. console / stdout collected by your log agent) via `WriteTo.FallbackChain`.
+## Production checklist
+
+- List **all** cluster nodes and publish to a **quorum queue**.
+- Add a fallback (`WriteTo.FallbackChain`) or `WriteUndeliveredToStandardOutput = true`.
+- Call `Log.CloseAndFlushAsync()` on shutdown; in Kubernetes keep `terminationGracePeriodSeconds` > `ShutdownTimeout` + 2 s.
+- Size `QueueSizeLimitBytes` for the outage you want to ride out (memory only, no disk).
+- Consumers: de-duplicate by `message-id` (at-least-once), sort by timestamp (order is not guaranteed).
+
+## Features
+
+- **No lost logs** — buffers during outages of any length, retries until RabbitMQ accepts each message, hands the rest
+  to a fallback sink; at-least-once with a stable `message-id` → [Delivery](docs/guide/delivery.md)
+- **Clusters and failover** — all nodes in `Hostnames`, round-robin reconnects, endless recovery
+  → [Configuration](docs/guide/configuration.md#hosts)
+- **Never blocks the app** — logging only enqueues; the broker may be down at start-up
+  → [Delivery](docs/guide/delivery.md#guarantees)
+- **Bounded memory, no disk** — byte-limited buffer (`QueueSizeLimitBytes`), built for containers
+  → [Kubernetes](docs/guide/kubernetes.md)
+- **Secret rotation without a restart** — passwords changed in `IConfiguration` and renewed certificate files are picked
+  up automatically → [Password rotation](docs/guide/configuration.md#rotating-the-password-without-a-restart),
+  [certificate rotation](docs/guide/tls.md#certificate-files-and-rotation)
+- **TLS** — private CA, mutual TLS, SASL EXTERNAL → [TLS](docs/guide/tls.md)
+- **Fallbacks** — `WriteTo.FallbackChain`, stdout output, `FallbackAfter` for long outages
+  → [Delivery](docs/guide/delivery.md#fallbacks)
+- **Graceful shutdown** — one deadline for delivering, handing over and closing → [Shutdown](docs/guide/delivery.md#shutdown)
+- **Loud configuration errors** — wrong credentials, permissions or missing targets are reported once, retrying goes on
+  → [Delivery](docs/guide/delivery.md#retries-and-failures)
+- **Any message format** — CLEF by default, any Serilog formatter, trace id as `correlation-id`, routing per event
+  → [Message format](docs/guide/message-format.md)
+- **Code or `appsettings.json`** — every common option in both → [Options reference](docs/guide/options.md)
+
+## Guides
+
+| | |
+|---|---|
+| [Configuration](docs/guide/configuration.md) | hosts, credentials, virtual hosts, `appsettings.json`, password rotation |
+| [TLS](docs/guide/tls.md) | private CA, mutual TLS, SASL EXTERNAL, certificate rotation |
+| [Message format](docs/guide/message-format.md) | what consumers receive, formatters, routing, custom properties |
+| [Delivery](docs/guide/delivery.md) | guarantees, retries, fallbacks, `FallbackAfter`, shutdown |
+| [Kubernetes](docs/guide/kubernetes.md) | pods, memory, secrets, cluster recommendations |
+| [Options reference](docs/guide/options.md) | every option with defaults and validation rules |
+
+## Try it locally
+
+```bash
+docker compose up -d
+dotnet run --project samples/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Sample            # appsettings.json
+dotnet run --project samples/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Sample -- code    # code
+```
+
+Management UI: http://localhost:15672 (`sample` / `sample`), queue `logs.sample`.
+
+---
+
+## Why another RabbitMQ sink?
+
+Existing Serilog RabbitMQ sinks use `RabbitMQ.Client` (AMQP 0-9-1). RabbitMQ 4.0 made AMQP 1.0 a core protocol and
+ships a dedicated AMQP 1.0 client for .NET; this sink uses it — per-message publish outcomes, AMQP 1.0 addressing,
+client connection recovery, no `RabbitMQ.Client` dependency. Comparison with existing sinks:
+[docs/prior-art.md](docs/prior-art.md); design: [docs/architecture.md](docs/architecture.md).
 
 ## Building from source
 
 ```bash
 dotnet build -c Release
 dotnet test --project tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Tests
+dotnet test --project tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests   # needs Docker or Podman
 ```
-
-Tests use [TUnit](https://tunit.dev). Integration tests start RabbitMQ 4 in containers and need Docker (or Podman):
-
-```bash
-dotnet test --project tests/Averenium.Serilog.Sinks.RabbitMQ.Amqp.IntegrationTests
-```
-
-## Repository layout
 
 | Path | Contents |
 |---|---|
-| `src/` | The library (NuGet package) |
-| `tests/` | Unit tests and Testcontainers-based integration tests |
-| `docs/` | Architecture notes and decision records |
-| `AGENTS.md` | Contribution rules for humans and AI agents |
+| `src/` | the library |
+| `tests/` | unit tests (TUnit) and Testcontainers integration tests |
+| `samples/`, `docker-compose.yml` | runnable sample and a local RabbitMQ |
+| `docs/guide/` | user guides |
+| `docs/architecture.md`, `docs/adr/` | design and decision records |
 
-## Contributing
-
-Read [AGENTS.md](AGENTS.md) before contributing — it covers conventions, public API tracking and test requirements.
-Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
-
-## License
-
-Apache-2.0.
+Releases: pushing a `vX.Y.Z` tag publishes to nuget.org (see [AGENTS.md → Releasing](AGENTS.md#releasing)). Contributing: read [AGENTS.md](AGENTS.md). Changes: [CHANGELOG.md](CHANGELOG.md). License: [MIT](LICENSE).

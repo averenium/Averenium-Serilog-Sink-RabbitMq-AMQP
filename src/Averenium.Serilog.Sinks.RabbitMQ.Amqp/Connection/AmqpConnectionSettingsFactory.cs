@@ -9,7 +9,9 @@ internal static class AmqpConnectionSettingsFactory
         IReadOnlyList<Uri> uris,
         string containerId,
         TimeSpan minReconnectDelay,
-        TimeSpan maxReconnectDelay)
+        TimeSpan maxReconnectDelay,
+        TlsSettings? tls = null,
+        SaslMechanism? sasl = null)
     {
         ArgumentNullException.ThrowIfNull(uris);
         if (uris.Count == 0)
@@ -29,6 +31,16 @@ internal static class AmqpConnectionSettingsFactory
         var builder = ConnectionSettingsBuilder.Create()
             .ContainerId(containerId)
             .RecoveryConfiguration(recovery);
+
+        if (tls is not null)
+        {
+            builder = builder.TlsSettings(tls);
+        }
+
+        if (sasl is not null)
+        {
+            builder = builder.SaslMechanism(sasl);
+        }
 
         builder = uris.Count == 1
             ? builder.Uri(uris[0])

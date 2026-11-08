@@ -1,28 +1,26 @@
 using System.Threading.Channels;
-using Serilog.Core;
 using Serilog.Events;
 
 namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.Buffering;
 
 /// <summary>
-/// Bounded in-memory buffer between <c>Emit</c> (many writers, never blocks) and the publish loop (single reader).
-/// Overflow follows <see cref="OverflowPolicy"/> and every dropped event is reported as
-/// <see cref="LoggingFailureKind.Permanent"/>. No disk is ever used (ADR 0002).
+/// Short burst buffer between <c>Emit</c> (many writers, never blocks) and the background formatter (single reader).
+/// It stays almost empty because the formatter never waits for the broker; the long outage buffer is the
+/// size-bounded <see cref="SizeBoundedQueue{T}"/>. Overflow follows <see cref="OverflowPolicy"/>; every dropped event
+/// is handed to <c>onDropped</c> (the caller reports it — no dependency on reporting here). No disk is ever used.
 /// </summary>
 internal sealed class EventBuffer
 {
     private readonly Channel<LogEvent> _channel;
-    private readonly FailureReporter _reporter;
-    private readonly OverflowPolicy _policy;
+    private readonly Action<LogEvent> _onDropped;
     private long _dropped;
 
-    public EventBuffer(int capacity, OverflowPolicy policy, FailureReporter reporter)
+    public EventBuffer(int capacity, OverflowPolicy policy, Action<LogEvent> onDropped)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
-        ArgumentNullException.ThrowIfNull(reporter);
+        ArgumentNullException.ThrowIfNull(onDropped);
 
-        _reporter = reporter;
-        _policy = policy;
+        _onDropped = onDropped;
         _channel = Channel.CreateBounded<LogEvent>(
             new BoundedChannelOptions(capacity)
             {
@@ -48,9 +46,6 @@ internal sealed class EventBuffer
     private void OnDropped(LogEvent logEvent)
     {
         Interlocked.Increment(ref _dropped);
-        _reporter.Report(
-            LoggingFailureKind.Permanent,
-            $"RabbitMQ sink buffer is full; event dropped ({_policy})",
-            [logEvent]);
+        _onDropped(logEvent);
     }
 }

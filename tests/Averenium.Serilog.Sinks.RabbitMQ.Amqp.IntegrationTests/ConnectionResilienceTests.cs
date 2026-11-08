@@ -1,5 +1,7 @@
 using Averenium.Serilog.Sinks.RabbitMQ.Amqp.Connection;
+using Averenium.Serilog.Sinks.RabbitMQ.Amqp.Connection.Models;
 using Averenium.Serilog.Sinks.RabbitMQ.Amqp.Publishing;
+using Averenium.Serilog.Sinks.RabbitMQ.Amqp.Publishing.Models;
 using RabbitMQ.AMQP.Client;
 using RabbitMQ.AMQP.Client.Impl;
 
@@ -20,7 +22,7 @@ public sealed class ConnectionResilienceTests
     {
         await using var node = new RabbitMqNode();
         await node.StartAsync(ct);
-        var topology = Topology.Unique();
+        var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         await using var harness = new SupervisorHarness([node.AmqpUri], topology);
 
@@ -34,7 +36,7 @@ public sealed class ConnectionResilienceTests
     public async Task Broker_down_at_startup_connects_once_it_comes_up(CancellationToken ct)
     {
         await using var node = new RabbitMqNode();
-        var topology = Topology.Unique();
+        var topology = TestTopology.Unique();
         await using var harness = new SupervisorHarness([node.AmqpUri], topology);
 
         harness.Supervisor.Start();
@@ -55,7 +57,7 @@ public sealed class ConnectionResilienceTests
     {
         await using var node = new RabbitMqNode();
         await node.StartAsync(ct);
-        var topology = Topology.Unique();
+        var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         await using var harness = new SupervisorHarness([node.AmqpUri], topology);
         harness.Supervisor.Start();
@@ -78,7 +80,7 @@ public sealed class ConnectionResilienceTests
     {
         await using var node = new RabbitMqNode();
         await node.StartAsync(ct);
-        var topology = Topology.Unique();
+        var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         await using var harness = new SupervisorHarness([node.AmqpUri], topology);
         harness.Supervisor.Start();
@@ -100,7 +102,7 @@ public sealed class ConnectionResilienceTests
         await using var nodeA = new RabbitMqNode();
         await using var nodeB = new RabbitMqNode();
         await Task.WhenAll(nodeA.StartAsync(ct), nodeB.StartAsync(ct));
-        var topology = Topology.Unique();
+        var topology = TestTopology.Unique();
         await nodeA.DeclareTopologyAsync(topology, ct);
         await nodeB.DeclareTopologyAsync(topology, ct);
         await using var harness = new SupervisorHarness([nodeA.AmqpUri, nodeB.AmqpUri], topology);
@@ -127,7 +129,7 @@ public sealed class ConnectionResilienceTests
     {
         await using var node = new RabbitMqNode();
         await node.StartAsync(ct);
-        var topology = Topology.Unique();
+        var topology = TestTopology.Unique();
         await node.DeclareTopologyAsync(topology, ct);
         await using var harness = new SupervisorHarness([node.AmqpUri], topology);
         harness.Supervisor.Start();

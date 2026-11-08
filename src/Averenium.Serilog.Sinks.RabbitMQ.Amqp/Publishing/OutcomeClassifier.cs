@@ -1,3 +1,4 @@
+using Averenium.Serilog.Sinks.RabbitMQ.Amqp.Publishing.Models;
 using RabbitMQ.AMQP.Client;
 
 namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.Publishing;
@@ -30,7 +31,7 @@ internal static class OutcomeClassifier
     private static OutcomeKind ClassifyRejection(string? errorCode) => errorCode switch
     {
         NotFound => OutcomeKind.TargetMissing,
-        ResourceLimitExceeded => OutcomeKind.Released,
+        ResourceLimitExceeded => OutcomeKind.Throttled,
         InternalError => OutcomeKind.ConnectionLost,
         "amqp:link:detach-forced" or "amqp:link:stolen" => OutcomeKind.ConnectionLost,
         not null when errorCode.StartsWith("amqp:connection:", StringComparison.Ordinal)

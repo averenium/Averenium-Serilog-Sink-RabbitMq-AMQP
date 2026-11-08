@@ -6,16 +6,31 @@
     <File Path="CHANGELOG.md" />
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
+    <File Path="docker-compose.yml" />
+    <File Path=".github/workflows/ci.yml" />
+    <File Path=".github/workflows/release.yml" />
     <File Path="global.json" />
+    <File Path="LICENSE" />
     <File Path="tests/.editorconfig" />
     <File Path="README.md" />
   </Folder>
   <Folder Name="/docs/">
     <File Path="docs/architecture.md" />
+    <File Path="docs/guide/configuration.md" />
+    <File Path="docs/guide/delivery.md" />
+    <File Path="docs/guide/kubernetes.md" />
+    <File Path="docs/guide/message-format.md" />
+    <File Path="docs/guide/options.md" />
+    <File Path="docs/guide/tls.md" />
     <File Path="docs/prior-art.md" />
     <File Path="docs/adr/0001-use-rabbitmq-amqp-client.md" />
     <File Path="docs/adr/0002-own-buffering-pipeline.md" />
     <File Path="docs/adr/0003-connection-supervision.md" />
+    <File Path="docs/adr/0004-background-formatting-byte-bounded-buffer.md" />
+    <File Path="docs/adr/0005-secret-rotation-without-restart.md" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Sample/Averenium.Serilog.Sinks.RabbitMQ.Amqp.Sample.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Averenium.Serilog.Sinks.RabbitMQ.Amqp/Averenium.Serilog.Sinks.RabbitMQ.Amqp.csproj" />

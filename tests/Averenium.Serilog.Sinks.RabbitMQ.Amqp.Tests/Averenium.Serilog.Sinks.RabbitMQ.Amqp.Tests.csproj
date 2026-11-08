@@ -9,6 +9,17 @@
     <PackageReference Include="TUnit" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+    <PackageReference Include="Serilog.Settings.Configuration" />
+    <PackageReference Include="Serilog.Expressions" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared test infrastructure, available in every test file -->
+    <Using Include="Averenium.Serilog.Sinks.RabbitMQ.Amqp.Tests.Support" />
+    <Using Include="Averenium.Serilog.Sinks.RabbitMQ.Amqp.Tests.TestDoubles" />
   </ItemGroup>
 
   <ItemGroup>

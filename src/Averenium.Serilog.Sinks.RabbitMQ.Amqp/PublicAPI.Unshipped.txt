@@ -7,8 +7,6 @@ Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.BatchSizeLimit.get
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.BatchSizeLimit.set -> void
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.BindingKey.get -> string?
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.BindingKey.set -> void
-Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.ConfigureMessage.get -> System.Action<Serilog.Events.LogEvent!, RabbitMQ.AMQP.Client.IMessage!>?
-Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.ConfigureMessage.set -> void
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.ConnectionName.get -> string?
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.ConnectionName.set -> void
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.ContentType.get -> string!
@@ -44,7 +42,62 @@ Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.RoutingKeySelector
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.RoutingKeySelector.set -> void
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.ShutdownTimeout.get -> System.TimeSpan
 Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.ShutdownTimeout.set -> void
-Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Uris.get -> System.Collections.Generic.IList<System.Uri!>!
 Serilog.RabbitMqAmqpLoggerConfigurationExtensions
 static Serilog.RabbitMqAmqpLoggerConfigurationExtensions.RabbitMQAmqp(this Serilog.Configuration.LoggerSinkConfiguration! sinkConfiguration, System.Action<Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions!>! configure, Serilog.Events.LogEventLevel restrictedToMinimumLevel = Serilog.Events.LogEventLevel.Verbose, Serilog.Core.LoggingLevelSwitch? levelSwitch = null) -> Serilog.LoggerConfiguration!
-static Serilog.RabbitMqAmqpLoggerConfigurationExtensions.RabbitMQAmqp(this Serilog.Configuration.LoggerSinkConfiguration! sinkConfiguration, string! uris, string? exchange = null, string? routingKey = null, string? queue = null, string? connectionName = null, int queueLimit = 100000, Averenium.Serilog.Sinks.RabbitMQ.Amqp.OverflowPolicy overflowPolicy = Averenium.Serilog.Sinks.RabbitMQ.Amqp.OverflowPolicy.DropOldest, int batchSizeLimit = 500, bool declareTopology = false, string! exchangeType = "topic", string? declareQueue = null, string? bindingKey = null, Serilog.Formatting.ITextFormatter? formatter = null, Serilog.Events.LogEventLevel restrictedToMinimumLevel = Serilog.Events.LogEventLevel.Verbose, Serilog.Core.LoggingLevelSwitch? levelSwitch = null) -> Serilog.LoggerConfiguration!
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.MessageProperties.get -> System.Func<Serilog.Events.LogEvent!, System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, object!>>!>?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.MessageProperties.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.QueueSizeLimitBytes.get -> long
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.QueueSizeLimitBytes.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.WriteUndeliveredToStandardOutput.get -> bool
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.WriteUndeliveredToStandardOutput.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Hostnames.get -> System.Collections.Generic.IList<string!>!
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Password.get -> string?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Password.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Port.get -> int?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Port.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.UseTls.get -> bool
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.UseTls.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Username.get -> string?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Username.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.VirtualHost.get -> string?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.VirtualHost.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.CorrelationIdFromTraceId.get -> bool
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.CorrelationIdFromTraceId.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.CorrelationIdSelector.get -> System.Func<Serilog.Events.LogEvent!, string?>?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.CorrelationIdSelector.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.DurableMessages.get -> bool
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.DurableMessages.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.FallbackAfter.get -> System.TimeSpan?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.FallbackAfter.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Tls.get -> Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions!
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Tls.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.AcceptablePolicyErrors.get -> System.Net.Security.SslPolicyErrors
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.AcceptablePolicyErrors.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.CaCertificatePath.get -> string?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.CaCertificatePath.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.CertificateValidation.get -> System.Net.Security.RemoteCertificateValidationCallback?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.CertificateValidation.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.CheckCertificateRevocation.get -> bool
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.CheckCertificateRevocation.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.ClientCertificate.get -> System.Security.Cryptography.X509Certificates.X509Certificate2?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.ClientCertificate.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.ClientCertificateKeyPath.get -> string?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.ClientCertificateKeyPath.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.ClientCertificatePassword.get -> string?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.ClientCertificatePassword.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.ClientCertificatePath.get -> string?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.ClientCertificatePath.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.Protocols.get -> System.Security.Authentication.SslProtocols?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.Protocols.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.RabbitMqAmqpTlsOptions() -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.UseExternalAuthentication.get -> bool
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions.UseExternalAuthentication.set -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpCredentialsSource
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpCredentialsSource.RabbitMqAmqpCredentialsSource(string! username, string? password) -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpCredentialsSource.Update(string! username, string? password) -> void
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpCredentialsSource.Username.get -> string!
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Credentials.get -> Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpCredentialsSource?
+Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpSinkOptions.Credentials.set -> void
+override Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpCredentialsSource.ToString() -> string!
+static Serilog.RabbitMqAmqpLoggerConfigurationExtensions.RabbitMQAmqp(this Serilog.Configuration.LoggerSinkConfiguration! sinkConfiguration, string![]! hostnames, string? username = null, string? password = null, string? virtualHost = null, int? port = null, bool useTls = false, string? exchange = null, string? routingKey = null, string? queue = null, string? connectionName = null, int queueLimit = 10000, long queueSizeLimitBytes = 15728640, Averenium.Serilog.Sinks.RabbitMQ.Amqp.OverflowPolicy overflowPolicy = Averenium.Serilog.Sinks.RabbitMQ.Amqp.OverflowPolicy.DropOldest, int batchSizeLimit = 500, bool declareTopology = false, string! exchangeType = "topic", string? declareQueue = null, string? bindingKey = null, Serilog.Formatting.ITextFormatter? formatter = null, string! contentType = "application/json", System.TimeSpan? publishTimeout = null, int maxReleasedRetries = 5, System.TimeSpan? minReconnectDelay = null, System.TimeSpan? maxReconnectDelay = null, bool writeUndeliveredToStandardOutput = false, System.TimeSpan? shutdownTimeout = null, Averenium.Serilog.Sinks.RabbitMQ.Amqp.RabbitMqAmqpTlsOptions? tls = null, bool correlationIdFromTraceId = true, bool durableMessages = true, System.TimeSpan? fallbackAfter = null, Serilog.Events.LogEventLevel restrictedToMinimumLevel = Serilog.Events.LogEventLevel.Verbose, Serilog.Core.LoggingLevelSwitch? levelSwitch = null, Microsoft.Extensions.Configuration.IConfiguration? configuration = null) -> Serilog.LoggerConfiguration!

@@ -1,3 +1,4 @@
+using Averenium.Serilog.Sinks.RabbitMQ.Amqp.Resilience;
 using RabbitMQ.AMQP.Client;
 
 namespace Averenium.Serilog.Sinks.RabbitMQ.Amqp.Connection;
